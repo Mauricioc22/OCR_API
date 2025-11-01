@@ -77,3 +77,94 @@ async def predict(file: UploadFile = File(...)):
         return JSONResponse(content={"plate": None})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def parse_ine_data(lines):
+    text_all = " ".join(lines)
+
+    data = {
+        "nombre": None,
+        "domicilio": None,
+        "fecha_nacimiento": None,
+        "curp": None,
+        "sexo": None
+    }
+
+    # Nombre: 3 líneas después de "NOMBRE"
+    try:
+        idx = lines.index("NOMBRE")
+        data["nombre"] = " ".join(lines[idx+1:idx+4])
+    except:
+        pass
+
+    # Domicilio: después de "DOMICILIO" hasta nueva sección
+    try:
+        idx = lines.index("DOMICILIO")
+        domicilio_parts = []
+        for i in range(idx+1, len(lines)):
+            if "CLAVE" in lines[i] or "CURP" in lines[i] or "SEXO" in lines[i]:
+                break
+            domicilio_parts.append(lines[i])
+        data["domicilio"] = " ".join(domicilio_parts)
+    except:
+        pass
+
+    # CURP
+    curp = re.search(r"\b[A-Z]{4}\d{6}[A-Z]{6}\d{2}\b", text_all)
+    if curp:
+        data["curp"] = curp.group(0)
+
+    # Fecha de nacimiento (dd/mm/aaaa)
+    fecha = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text_all)
+    if fecha:
+        data["fecha_nacimiento"] = fecha.group(0)
+
+    # Sexo
+    if "SEXO H" in text_all:
+        data["sexo"] = "H"
+    elif "SEXO M" in text_all:
+        data["sexo"] = "M"
+
+    return data
+
+
+@app.post("/extract_text")
+async def extract_text(file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+        npimg = np.frombuffer(contents, np.uint8)
+        image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        if image is None:
+            raise HTTPException(status_code=400, detail="Invalid image file")
+
+        # OCR
+        result_ocr = ocr.predict(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        boxes = result_ocr[0]['rec_boxes']
+        texts = result_ocr[0]['rec_texts']
+        box_text_pairs = list(zip(boxes, texts))
+
+        # Ordenar horizontal por posición Y
+        box_text_pairs.sort(key=lambda x: min(x[0][1], x[0][3]))
+
+        # Agrupar líneas según cercanía vertical
+        lines = []
+        line_threshold = 15
+        for box, text in box_text_pairs:
+            y = min(box[1], box[3])
+            if not lines or abs(y - lines[-1][0]) > line_threshold:
+                lines.append([y, [(box, text)]])
+            else:
+                lines[-1][1].append((box, text))
+
+        # Ordenar por X y extraer
+        extracted_lines = []
+        for _, line in lines:
+            line.sort(key=lambda x: min(x[0][0], x[0][2]))
+            extracted_lines.extend([t for _, t in line])
+
+        ine_data = parse_ine_data(extracted_lines)
+
+        return JSONResponse(content=ine_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
