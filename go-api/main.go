@@ -1,0 +1,18 @@
+package main 
+import (
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"go-api/routes"
+)
+
+func main(){
+	e := echo.New()
+
+	routes.SetupRoutes(e)
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "method=${method}, uri=${uri}, status=${status}, time=${latency_human}\n",
+	}))
+	
+
+	e.Start(":8080")
+}
