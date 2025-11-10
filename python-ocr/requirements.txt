@@ -1,3 +1,7 @@
+ultralytics
+imutils
+paddlepaddle
+paddleocr
 fastapi
 uvicorn
 python-multipart
