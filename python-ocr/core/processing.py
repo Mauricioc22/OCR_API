@@ -4,14 +4,14 @@ import re
 
 def load_image(contents):
     """
-    Carga y decodifica una imagen desde un archivo.
+    Loads and decodes an image from a file.
     """
     npimg = np.frombuffer(contents, np.uint8)
     return npimg
 
 def extract_plate_number(text):
     """
-    Extrae un número de placa válido de un texto dado.
+    Extracts a valid license plate number from given text.
     """
     plate_patterns = [
         r'[A-Z]{3}[0-9]{3}',
@@ -30,11 +30,13 @@ def extract_plate_number(text):
 
 def parse_ine_data(lines):
     """
-    Procesa las líneas de texto detectadas para extraer información específica.
+    Parses detected text lines to extract specific information.
     """
+    
     text_all = " ".join(lines)
 
     data = {
+        "tipo_identificacion": None,
         "nombre": None,
         "domicilio": None,
         "fecha_nacimiento": None,
@@ -42,10 +44,28 @@ def parse_ine_data(lines):
         "sexo": None
     }
 
-    # Nombre: 3 líneas después de "NOMBRE"
+    #Tipo_identificacion: 
+    id_types = {
+        "INSTITUTO NACIONAL ELECTORAL": "INE",
+        "CREDENCIAL PARA VOTAR": "INE",
+        "PASAPORTE": "Pasaporte",
+        "LICENCIA DE CONDUCIR": "Licencia de Conducir"
+    }
+    for key, value in id_types.items():
+        if key in text_all:
+            data["tipo_identificacion"] = value
+            break
+
+    # Nombre: todo el texto después de "NOMBRE" hasta "DOMICILIO"
     try:
-        idx = lines.index("NOMBRE")
-        data["nombre"] = " ".join(lines[idx+1:idx+4])
+        idx_nombre = lines.index("NOMBRE")
+        idx_domicilio = lines.index("DOMICILIO") if "DOMICILIO" in lines else len(lines)
+        nombre_lines = []
+        for line in lines[idx_nombre+1:idx_domicilio]:
+            if line in ["SEXO H", "SEXO M"]:
+                continue
+            nombre_lines.append(line)
+        data["nombre"] = " ".join(nombre_lines)
     except:
         pass
 

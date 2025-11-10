@@ -3,7 +3,7 @@ from api.endpoints import router
 
 app = FastAPI()
 
-# Registrar rutas
+# Register API router
 app.include_router(router)
 
 if __name__ == "__main__":
